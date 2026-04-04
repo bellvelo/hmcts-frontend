@@ -1,121 +1,507 @@
-{% from "govuk/components/summary-list/macro.njk" import govukSummaryList %}
-
 {% extends "template.njk" %}
 
-<!-- You may want to make further use of these components: https://design-system.service.gov.uk/components/
-but ultimately it is up to you -->
-
 {% block content %}
-  <h1 class="govuk-heading-xl">Welcome to your dev test!</h1>
+  <h1 class="govuk-heading-xl">HMCTS | Task Manager</h1>
 
-  <!-- The freedom is yours. You can design the solution however you like, however there is a starting point provided
-  to ensure you have both services running. You may want to make use of the Gov UK Components:
-  https://design-system.service.gov.uk/components/ to add tabs and so forth :) -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <input class="govuk-input" id="search-bar" type="text" placeholder="Search by title or case manager" oninput="searchTasks()">
+    </div>
+  </div>
 
-  {% if example.id %}
+<div class="d-flex align-items-center mb-3">
+  <button class="govuk-button govuk-button--primary me-3" onclick="showCreateModal()">Create Task</button>
+  <input class="govuk-input me-3" id="search-id" type="text" placeholder="Search by ID" style="width: 300px;">
+  <button class="govuk-button govuk-button--secondary me-3" onclick="searchById()">Search ID</button>
+  <button class="govuk-button govuk-button--secondary" onclick="loadTasks()">Refresh</button>
+</div>
 
-    {{ govukSummaryList({
-      rows: [
-        {
-          key: {
-            text: "ID"
-          },
-          value: {
-            text: example.id
-          },
-          actions: {
-            items: [
-              {
-                href: "#",
-                text: "Change",
-                visuallyHiddenText: "change case id ?!"
-              }
-            ]
+  <style>
+    /* Enforce consistent height and alignment for all buttons and inputs */
+    .govuk-input, .govuk-button {
+      height: 40px; 
+      vertical-align: middle;
+    }
+    /* Bootstrap's input-group overrides to work with GOV.UK styles */
+    .input-group .govuk-input {
+      position: relative;
+      flex: 1 1 auto;
+      width: 1% !important; /* Important for flexbox sizing in input-group */
+      min-width: 0;
+    }
+    .input-group > .govuk-input:not(:last-child) {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+    .input-group > .govuk-button:not(:first-child) {
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    .govuk-table__header.case-number {
+  width: 15%;
+}
+/* Add hover effect for discoverability */
+.govuk-table__head a[data-sort]:hover {
+  cursor: pointer;
+  text-decoration: underline;
+  color: #005ea5; /* GOV.UK link blue color */
+}
+  </style>
+
+<style>  
+  /* 
+    The GOV.UK stylesheet adds a
+    default bottom margin to form elements, which throws off
+    flexbox's vertical alignment. 
+    
+    This rule removes that margin ONLY for the elements inside
+    our specific `d-flex` container, forcing them to align properly.
+  */
+  .d-flex > .govuk-input,
+  .d-flex > .govuk-button {
+    margin-bottom: 0;
+  }
+
+/* Style for the sortable header links */
+.govuk-table__head a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Add up/down arrows for sorting indicators */
+.govuk-table__head a.sort-asc::after {
+  content: ' ▲';
+  font-size: 0.8em;
+}
+
+.govuk-table__head a.sort-desc::after {
+  content: ' ▼';
+  font-size: 0.8em;
+}
+  
+</style>
+
+  <h2 class="govuk-heading-l">Task List</h2>
+
+  <div class="govuk-table-container">
+    <table class="govuk-table">
+<thead class="govuk-table__head">
+  <tr class="govuk-table__row">
+    <!-- Updated headers to be clickable links for sorting -->
+    <th scope="col" class="govuk-table__header case-number"><a href="#" data-sort="caseNumber">Case Number</a></th>
+    <th scope="col" class="govuk-table__header title"><a href="#" data-sort="title">Title</a></th>
+    <th scope="col" class="govuk-table__header case-manager"><a href="#" data-sort="caseManager">Case Manager</a></th>
+    <th scope="col" class="govuk-table__header status"><a href="#" data-sort="status">Status</a></th>
+    <th scope="col" class="govuk-table__header due-date"><a href="#" data-sort="dueDate">Due Date</a></th>
+    <th scope="col" class="govuk-table__header description">Description</th>
+    <th scope="col" class="govuk-table__header actions">Actions</th>
+  </tr>
+</thead>
+      <tbody id="task-list">
+        <!-- Rows will be populated here by JavaScript -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Create Modal -->
+  <div class="modal fade" id="createTaskModal" tabindex="-1" aria-labelledby="createTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="createTaskModalLabel">Create New Task</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="create-task-form">
+            <div class="mb-3">
+              <label class="form-label" for="task-title">Title</label>
+              <input class="form-control" id="task-title" name="task-title" type="text" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="task-description">Description (optional)</label>
+              <input class="form-control" id="task-description" name="task-description" type="text" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="task-manager">Case Manager</label>
+              <input class="form-control" id="task-manager" name="task-manager" type="text" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="task-status">Status</label>
+              <select class="form-select" id="task-status" name="task-status">
+                <option value="PENDING_TRIAL">Pending Trial</option>
+                <option value="AWAITING_SENTENCING">Awaiting Sentencing</option>
+                <option value="DISCLOSURE">Disclosure</option>
+                <option value="PENDING">Pending</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="NOT_PROVEN">Not Proven</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="task-due-date">Due Date</label>
+              <input class="form-control" id="task-due-date" name="task-due-date" type="date" required />
+            </div>
+            <button class="btn btn-primary" type="submit">Create Task</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update Modal -->
+  <div class="modal fade" id="updateTaskModal" tabindex="-1" aria-labelledby="updateTaskModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="updateTaskModalLabel">Update Task</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="update-task-form">
+            <div class="mb-3">
+              <label for="update-task-title" class="form-label">Title</label>
+              <input type="text" class="form-control" id="update-task-title" required>
+            </div>
+            <div class="mb-3">
+              <label for="update-task-description" class="form-label">Description</label>
+              <input type="text" class="form-control" id="update-task-description">
+            </div>
+            <div class="mb-3">
+              <label for="update-task-manager" class="form-label">Case Manager</label>
+              <input type="text" class="form-control" id="update-task-manager" required>
+            </div>
+            <div class="mb-3">
+              <label for="update-task-status" class="form-label">Status</label>
+              <select class="form-select" id="update-task-status">
+                <option value="PENDING_TRIAL">Pending Trial</option>
+                <option value="AWAITING_SENTENCING">Awaiting Sentencing</option>
+                <option value="DISCLOSURE">Disclosure</option>
+                <option value="PENDING">Pending</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="NOT_PROVEN">Not Proven</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="update-task-due-date" class="form-label">Due Date</label>
+              <input type="date" class="form-control" id="update-task-due-date" required>
+            </div>
+            <button type="button" class="btn btn-primary" id="save-task-changes">Save changes</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:4000/api/tasks'; // Updated API URL for tasks
+    let tasks = [];
+    let currentTaskId = null;
+
+
+// State variables to track the current sort order
+let currentSortColumn = 'dueDate'; // Default sort column
+let currentSortDirection = 'asc';  // Default sort direction ('asc' or 'desc')
+
+function updateSortIndicators() {
+  // Remove indicators from all headers first
+  document.querySelectorAll('.govuk-table__head a[data-sort]').forEach(link => {
+    link.classList.remove('sort-asc', 'sort-desc');
+  });
+
+  // Add the correct indicator to the currently sorted column
+  const activeLink = document.querySelector(`.govuk-table__head a[data-sort="${currentSortColumn}"]`);
+  if (activeLink) {
+    activeLink.classList.add(currentSortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+  }
+}
+
+function sortTasks(column) {
+  // If clicking the same column, reverse the direction. Otherwise, reset to ascending.
+  if (column === currentSortColumn) {
+    currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    currentSortColumn = column;
+    currentSortDirection = 'asc';
+  }
+
+  // A robust sorting function that handles strings, dates, and numbers
+  tasks.sort((a, b) => {
+    const valA = a[currentSortColumn];
+    const valB = b[currentSortColumn];
+
+    // Handle date sorting specifically
+    if (currentSortColumn === 'dueDate') {
+      return (new Date(valA) - new Date(valB));
+    }
+
+    // Handle string sorting for all other columns
+    if (typeof valA === 'string' && typeof valB === 'string') {
+      return valA.localeCompare(valB);
+    }
+    
+    // Fallback for other types (like numbers)
+    if (valA > valB) return 1;
+    if (valA < valB) return -1;
+    return 0;
+  });
+
+  // If descending, reverse the sorted array
+  if (currentSortDirection === 'desc') {
+    tasks.reverse();
+  }
+
+  // Re-render the table with the sorted data and update indicators
+  renderTasks(tasks);
+  updateSortIndicators();
+}
+
+
+    // Mapping for status display names
+    const statusDisplayNames = {
+      "PENDING_TRIAL": "Pending Trial",
+      "AWAITING_SENTENCING": "Awaiting Sentencing",
+      "DISCLOSURE": "Disclosure",
+      "PENDING": "Pending",
+      "IN_PROGRESS": "In Progress",
+      "COMPLETED": "Completed",
+      "NOT_PROVEN": "Not Proven"
+    };
+
+    function loadTasks() {
+      document.getElementById('search-id').value = '';
+      fetch(API_URL)
+        .then(response => response.json())
+        .then(data => {
+          tasks = data;
+          renderTasks(tasks);
+          updateSortIndicators(); 
+
+        })
+        .catch(error => {
+          console.error('Error fetching tasks:', error);
+          alert('Failed to load tasks. Please check if the backend is running.');
+        });
+    }
+
+    function searchTasks() {
+      const query = document.getElementById('search-bar').value.trim().toLowerCase();
+      if (query === "") {
+        loadTasks(); // If search is cleared, reload all tasks
+        return;
+      }
+      const filteredTasks = tasks.filter(task => 
+        task.title.toLowerCase().includes(query) || task.caseManager.toLowerCase().includes(query)
+      );
+      renderTasks(filteredTasks);
+    }
+
+    function searchById() {
+      const id = document.getElementById('search-id').value.trim();
+      if (id === "") {
+        loadTasks(); // If ID search is cleared, reload all tasks
+        return;
+      }
+      
+      fetch(`${API_URL}/${id}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Task not found');
           }
+          return response.json();
+        })
+        .then(task => {
+          renderTasks([task]); // Render only the found task
+        })
+        .catch(error => {
+          console.error('Error searching by ID:', error);
+          alert('Task with that ID was not found.');
+          loadTasks(); // Reload all tasks if search fails
+        });
+    }
+
+    function renderTasks(tasksList) {
+      const tableBody = document.getElementById('task-list');
+      tableBody.innerHTML = '';
+
+      if (tasksList.length === 0) {
+        tableBody.innerHTML = '<tr class="govuk-table__row"><td class="govuk-table__cell" colspan="7">No tasks found.</td></tr>';
+      } else {
+        tasksList.forEach(task => {
+          const row = document.createElement('tr');
+          row.className = 'govuk-table__row';
+          row.innerHTML = `
+            <td class="govuk-table__cell">${task.caseNumber || 'N/A'}</td>
+            <td class="govuk-table__cell">${task.title}</td>
+            <td class="govuk-table__cell">${task.caseManager}</td>
+            <td class="govuk-table__cell">${statusDisplayNames[task.status] || 'N/A'}</td>
+            <td class="govuk-table__cell">${new Date(task.dueDate).toLocaleDateString()}</td>
+            <td class="govuk-table__cell">${task.description || 'N/A'}</td>
+            <td class="govuk-table__cell actions-cell">
+              <button onclick="updateTask(${task.id})" class="govuk-button govuk-button--secondary">Update</button>
+              <button onclick="deleteTask(${task.id})" class="govuk-button govuk-button--warning">Delete</button>
+            </td>
+          `;
+          tableBody.appendChild(row);
+        });
+      }
+    }
+
+    function showCreateModal() {
+      new bootstrap.Modal(document.getElementById('createTaskModal')).show();
+    }
+
+    function updateTask(id) {
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        currentTaskId = id;
+
+        // Populate modal or form with existing data
+        document.getElementById('update-task-title').value = task.title;
+        document.getElementById('update-task-description').value = task.description || '';
+        document.getElementById('update-task-manager').value = task.caseManager;
+        document.getElementById('update-task-status').value = task.status;
+        document.getElementById('update-task-due-date').value = new Date(task.dueDate).toISOString().slice(0, 10);
+
+        // Show the update modal
+        new bootstrap.Modal(document.getElementById('updateTaskModal')).show();
+      }
+    }
+
+    document.getElementById('save-task-changes').addEventListener('click', function() {
+    const originalTask = tasks.find(t => t.id === currentTaskId);
+    if (!originalTask) {
+        alert('Error: Could not find original task data to update.');
+        return;
+    }
+
+    const updatedTask = {
+        title: document.getElementById('update-task-title').value.trim(),
+        description: document.getElementById('update-task-description').value.trim(),
+        caseManager: document.getElementById('update-task-manager').value.trim(),
+        status: document.getElementById('update-task-status').value.trim(),
+        dueDate: document.getElementById('update-task-due-date').value,
+        caseNumber: originalTask.caseNumber 
+    };
+
+    fetch(`${API_URL}/${currentTaskId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
         },
-        {
-          key: {
-            text: "Case Number"
-          },
-          value: {
-            text: example.caseNumber
-          },
-          actions: {
-            items: [
-              {
-                href: "#",
-                text: "Change",
-                visuallyHiddenText: "change case number"
-              }
-            ]
-          }
-        },
-        {
-          key: {
-            text: "Title"
-          },
-          value: {
-            html: example.title
-          },
-          actions: {
-            items: [
-              {
-                href: "#",
-                text: "Change",
-                visuallyHiddenText: "change case title"
-              }
-            ]
-          }
-        },
-        {
-          key: {
-            text: "Description"
-          },
-          value: {
-            html: example.description
-          },
-          actions: {
-            items: [
-               {
-                 href: "#",
-                 text: "Delete",
-                 visuallyHiddenText: "Delete description"
-               },
-               {
-                 href: "#",
-                 text: "Change",
-                 visuallyHiddenText: "Change description"
-               }
-            ]
-          }
-        },
-        {
-          key: {
-            text: "Status"
-          },
-          value: {
-            html: example.status
-          },
-          actions: {
-            items: [
-            ]
-          }
-        },
-        {
-          key: {
-           text: "Created Date"
-          },
-          value: {
-           html: example.createdDate
-          },
-          actions: {
-           items: [
-           ]
-          }
+        body: JSON.stringify(updatedTask)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                const errorMessages = Object.values(err).join(' ');
+                throw new Error(errorMessages || 'Failed to update task');
+            });
         }
-      ]
-    }) }}
+        return response.json();
+    })
+    .then(data => {
+        console.log('Task updated:', data);
+        loadTasks();
 
-  {% endif %}
+        const updateModalEl = document.getElementById('updateTaskModal');
+        const updateModal = bootstrap.Modal.getInstance(updateModalEl);
+        if (updateModal) {
+            updateModal.hide();
+        }
+    })
+    .catch(error => {
+        console.error('Error updating task:', error);
+        alert(`Failed to update task. Reason: ${error.message}`);
+    });
+});
 
+    function deleteTask(id) {
+      if (confirm('Are you sure you want to delete this task?')) {
+        fetch(`${API_URL}/${id}`, {
+          method: 'DELETE'
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to delete task');
+          }
+          console.log('Task deleted');
+          loadTasks();
+        })
+        .catch(error => {
+          console.error('Error deleting task:', error);
+          alert('Failed to delete task. Please try again.');
+        });
+      }
+    }
+
+document.getElementById('create-task-form').addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    const newTask = {
+        title: document.getElementById('task-title').value.trim(),
+        description: document.getElementById('task-description').value.trim(),
+        caseManager: document.getElementById('task-manager').value.trim(),
+        status: document.getElementById('task-status').value,
+        dueDate: document.getElementById('task-due-date').value
+    };
+
+    fetch(API_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newTask)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                // Extract all error messages and join them
+                const errorMessages = Object.values(err).join(' ');
+                throw new Error(errorMessages || 'Failed to create task');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Task created:', data);
+        loadTasks();
+        document.getElementById('create-task-form').reset();
+        
+        const createModalEl = document.getElementById('createTaskModal');
+        const createModal = bootstrap.Modal.getInstance(createModalEl);
+        if(createModal) {
+            createModal.hide();
+        }
+    })
+    .catch(error => {
+        console.error('Error creating task:', error);
+        alert(`Failed to create task. Reason: ${error.message}`);
+    });
+});
+
+    loadTasks();
+
+    // Add a single event listener to the page that waits for the DOM to be ready
+  document.addEventListener('DOMContentLoaded', () => {
+  const tableHead = document.querySelector('.govuk-table__head');
+  
+  // Listen for clicks on the table headers
+  tableHead.addEventListener('click', (event) => {
+    // Ensure we are clicking on the 'a' tag
+    const link = event.target.closest('a[data-sort]');
+    if (link) {
+      event.preventDefault(); // Prevent the link from navigating
+      sortTasks(link.dataset.sort);
+    }
+  });
+
+  // Initial load of tasks
+  loadTasks();
+});
+
+  </script>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 {% endblock %}
