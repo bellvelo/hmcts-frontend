@@ -1,6 +1,7 @@
 import { app } from '../../main/app';
 import request from 'supertest';
 
+
 describe('Home page', () => {
   describe('on GET /', () => {
     it('should return task manager home page with 200 status', async () => {
@@ -32,3 +33,4 @@ describe('Home page', () => {
     });
   });
 });
+

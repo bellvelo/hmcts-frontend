@@ -9,6 +9,8 @@ import express from 'express';
 import { glob } from 'glob';
 import favicon from 'serve-favicon';
 
+wqwqwqwqw
+
 const { setupDev } = require('./development');
 
 const env = process.env.NODE_ENV || 'development';
